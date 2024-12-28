@@ -1,4 +1,4 @@
-# simple-agent
+# simple-agent
 
 Testing out a simple agent that can run shell commands inside a Docker container.
 

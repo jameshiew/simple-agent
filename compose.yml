@@ -1,0 +1,28 @@
+services:
+  agent:
+    build:
+      context: .
+    pull_policy: "never"
+    image: "simple-agent:latest"
+    environment:
+      - RUST_LOG=info
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command:
+      - "simple-agent"
+      - "--ollama"
+      - "http://host.docker.internal:11434"
+      - "--task"
+      # choose one task
+      # - "/system/task_build_run.md"
+      - "/system/task_python_fibonacci.md"
+      # - "/system/task_wikipedia_title.md"
+      - "--system"
+      - "/system/system.md"
+      - "--template"
+      - "/system/template.hbs"
+      - "--model"
+      - "qwen2.5-coder:32b-instruct-q5_K_M"
+    volumes:
+      - ./workspace:/workspace
+      - ./system:/system:ro

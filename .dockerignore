@@ -1,0 +1,7 @@
+*
+!Cargo.lock
+!Cargo.toml
+!crates
+!task.txt
+!template.hbs
+!recipe.json

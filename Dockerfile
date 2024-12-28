@@ -33,8 +33,6 @@ RUN ls /target
 
 FROM debian:12
 
-ARG TARGETPLATFORM
-
 RUN apt-get update && apt-get install -y \
     binutils \
     curl \

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use clap::{command, Parser};
 use handlebars::Handlebars;
 use ollama_rs::generation::chat::request::ChatMessageRequest;
@@ -58,9 +58,55 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+struct OllamaChatProvider {
+    client: Ollama,
+    model: String,
+    system_prompt: String,
+    chat_id: String,
+}
+
+impl OllamaChatProvider {
+    fn new(client: Ollama, model: String, system_prompt: String) -> Self {
+        Self {
+            client,
+            model,
+            system_prompt,
+            chat_id: uuid::Uuid::new_v4().to_string(),
+        }
+    }
+}
+
+trait ChatProvider {
+    async fn send(&mut self, message: &str) -> Result<String>;
+    fn render(&self, message: &str) -> String;
+}
+
+impl ChatProvider for OllamaChatProvider {
+    async fn send(&mut self, message: &str) -> Result<String> {
+        let msg = ChatMessage {
+            role: MessageRole::User,
+            content: self.render(&message),
+            images: None,
+        };
+        let request = ChatMessageRequest::new(self.model.clone(), vec![msg]);
+        let response = self
+            .client
+            .send_chat_messages_with_history(request, &self.chat_id)
+            .await?;
+        response
+            .message
+            .ok_or_else(|| anyhow!("no message received from Ollama"))
+            .map(|m| m.content)
+    }
+
+    fn render(&self, message: &str) -> String {
+        format!("{}\n{}", self.system_prompt, message)
+    }
+}
+
 async fn run_agent(cli: Cli) -> Result<()> {
     let model = cli.model.clone();
-    let mut ollama = Ollama::from_url(cli.ollama);
+    let ollama = Ollama::from_url(cli.ollama);
     let models = ollama
         .list_local_models()
         .await
@@ -68,9 +114,6 @@ async fn run_agent(cli: Cli) -> Result<()> {
     if !models.into_iter().any(|m| m.name == model) {
         bail!("Model {} not found", model);
     }
-    let chat_id = uuid::Uuid::new_v4().to_string();
-    println!("Model: {}", model);
-    println!("Chat ID: {}", chat_id);
 
     let task = fs::read_to_string(cli.task)
         .await
@@ -78,38 +121,33 @@ async fn run_agent(cli: Cli) -> Result<()> {
     let system = fs::read_to_string(cli.system)
         .await
         .with_context(|| "Failed to read system")?;
-    let template = fs::read_to_string(cli.template)
+    let task_template = fs::read_to_string(cli.template)
         .await
         .with_context(|| "Failed to read template")?;
+    let mut template_registry = Handlebars::new();
+    template_registry.register_escape_fn(|s| s.to_string());
 
-    let mut reg = Handlebars::new();
-    reg.register_escape_fn(|s| s.to_string());
+    let task_values = HashMap::from([("task", task)]);
+    let mut message = template_registry.render_template(&task_template, &task_values)?;
+    let mut ollama = OllamaChatProvider::new(ollama, cli.model.clone(), system);
 
-    let values = HashMap::from([("task", task)]);
-    let rendered = reg.render_template(&template, &values)?;
+    println!("Model: {}", model);
+    println!("Chat ID: {}", ollama.chat_id);
 
-    let formatted = format!("{}\n{}", system, rendered);
+    let first_prompt = ollama.render(&message);
+    println!("---");
     println!("## First request");
-    println!("{}", &formatted);
+    println!("{}", &first_prompt);
     println!();
-    let initial_message = ChatMessage {
-        role: MessageRole::User,
-        content: formatted,
-        images: None,
-    };
-    let mut request = ChatMessageRequest::new(model.clone(), vec![initial_message]);
-    println!("Sending first request to Ollama (may take a short while while model is loaded)");
+    println!("> Sending first request to Ollama (may take a short while while model is loaded)");
+    let mut i = 0;
     loop {
-        let response = ollama
-            .send_chat_messages_with_history(request, &chat_id)
-            .await?;
-        let Some(message) = response.message else {
-            bail!("No message received from Ollama");
-        };
-        println!("## Response {}", response.created_at);
-        println!("{}", message.content);
+        i += 1;
+        let response = ollama.send(&message).await?;
+        println!("## Response {}", i);
+        println!("{}", response);
         println!();
-        let output = match parse(&message.content) {
+        let output = match parse(&response) {
             Ok(response) => {
                 if response.run.trim_ascii_start().trim_ascii_end().eq("STOP") {
                     None
@@ -157,18 +195,12 @@ async fn run_agent(cli: Cli) -> Result<()> {
             break;
         };
 
-        let formatted = serde_yml::to_string(&output)?;
+        message = serde_yml::to_string(&output)?;
 
         println!("---");
-        println!("## Request {}", response.created_at);
-        println!("{}", formatted);
+        println!("## Request {}", i);
+        println!("{}", message);
         println!();
-        tracing::debug!(%formatted, "formatted");
-        let formatted = format!("{}\n{}", system, formatted);
-        request = ChatMessageRequest::new(
-            model.clone(),
-            vec![ChatMessage::new(MessageRole::User, formatted)],
-        );
     }
     Ok(())
 }

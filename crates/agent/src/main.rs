@@ -118,18 +118,18 @@ async fn run_agent(cli: Cli) -> Result<()> {
         .await
         .with_context(|| "couldn't list available models, is Ollama running and reachable?")?;
     if !models.into_iter().any(|m| m.name == model) {
-        bail!("Model {} not found", model);
+        bail!("model {} not found", model);
     }
 
     let task = fs::read_to_string(cli.task)
         .await
-        .with_context(|| "Failed to read task")?;
+        .with_context(|| "failed to read task")?;
     let system = fs::read_to_string(cli.system)
         .await
-        .with_context(|| "Failed to read system")?;
+        .with_context(|| "failed to read system")?;
     let task_template = fs::read_to_string(cli.template)
         .await
-        .with_context(|| "Failed to read template")?;
+        .with_context(|| "failed to read template")?;
     let mut template_registry = Handlebars::new();
     template_registry.register_escape_fn(|s| s.to_string());
 

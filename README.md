@@ -4,15 +4,15 @@ Testing out a simple agent that can run shell commands inside a Docker container
 
 System prompt and example tasks in `system/`:
 
-- `task_build_run.md` - build and run a program in Go
+- `task_build_run.md` - build and run a tiny program in Go
 - `task_python_fibonacci.md` - Python script that outputs the first n Fibonacci numbers
 - `task_wikipedia_title.md` - download the Wikipedia homepage and parse the title
 
-Task is selected in `docker-compose.yml` and any files written by the agent should appear in the `workspace/` directory.
+Task is passed as an argument to the `simple-agent` binary in `compose.yml` and any files written by the agent should appear in the `workspace/` directory.
 
 ## Requirements
 
-- ollama
+- [Ollama](https://ollama.com/)
 - Docker
 - able to run the [qwen2.5-coder:32b-instruct-q5_K_M](https://ollama.com/library/qwen2.5-coder:32b-instruct-q5_K_M) model - it may work with smaller Qwen2.5-Coder instruct models
 

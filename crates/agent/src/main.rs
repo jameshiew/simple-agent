@@ -2,14 +2,13 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use anyhow::{anyhow, bail, Context, Result};
-use clap::{command, Parser};
+use clap::{command, Parser, Subcommand};
 use handlebars::Handlebars;
 use ollama_rs::generation::chat::request::ChatMessageRequest;
 use ollama_rs::generation::chat::{ChatMessage, MessageRole};
 use ollama_rs::Ollama;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
-use tokio::process::Command;
 use tokio::signal::unix::SignalKind;
 use tokio::{fs, signal};
 use tracing_subscriber::EnvFilter;
@@ -17,19 +16,39 @@ use tracing_subscriber::EnvFilter;
 #[derive(Debug, Parser)]
 #[command(version)]
 struct Cli {
-    #[arg(long, help = "File containing the task to execute")]
+    #[clap(subcommand)]
+    command: Command,
+    #[arg(
+        long,
+        global = true,
+        default_value = "task.md",
+        help = "File containing the task to execute"
+    )]
     task: PathBuf,
-    #[arg(long, help = "The model to use")]
-    model: String,
-    #[arg(long, short)]
-    ollama: Url,
-    #[arg(long, help = "The path to the system prompt")]
+    #[arg(
+        long,
+        global = true,
+        default_value = "system.md",
+        help = "The path to the system prompt"
+    )]
     system: PathBuf,
     #[arg(
         long,
+        global = true,
+        default_value = "template.hbs",
         help = "The path to the Handlebars template that will wrap the task"
     )]
     template: PathBuf,
+}
+
+#[derive(Debug, Subcommand, Clone)]
+enum Command {
+    Ollama {
+        #[arg(long, help = "The model to use")]
+        model: String,
+        #[arg(long, short)]
+        url: Url,
+    },
 }
 
 #[tokio::main]
@@ -111,8 +130,9 @@ impl ChatProvider for OllamaChatProvider {
 }
 
 async fn run_agent(cli: Cli) -> Result<()> {
-    let model = cli.model.clone();
-    let ollama = Ollama::from_url(cli.ollama);
+    let Command::Ollama { model, url } = cli.command;
+    let model = model.clone();
+    let ollama = Ollama::from_url(url);
     let models = ollama
         .list_local_models()
         .await
@@ -135,7 +155,7 @@ async fn run_agent(cli: Cli) -> Result<()> {
 
     let task_values = HashMap::from([("task", task)]);
     let mut message = template_registry.render_template(&task_template, &task_values)?;
-    let mut ollama = OllamaChatProvider::new(ollama, cli.model.clone(), system);
+    let mut ollama = OllamaChatProvider::new(ollama, model.clone(), system);
 
     println!("Model: {}", model);
     println!("Chat ID: {}", ollama.chat_id);
@@ -158,7 +178,7 @@ async fn run_agent(cli: Cli) -> Result<()> {
                 if response.run.trim_ascii_start().trim_ascii_end().eq("STOP") {
                     None
                 } else {
-                    let mut cmd = Command::new("bash");
+                    let mut cmd = tokio::process::Command::new("bash");
                     cmd.arg("-c");
                     cmd.args(vec![response.run]);
                     match cmd.output().await {

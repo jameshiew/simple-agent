@@ -10,7 +10,8 @@ services:
       - "host.docker.internal:host-gateway"
     command:
       - "simple-agent"
-      - "--ollama"
+      - "ollama"
+      - "--url"
       - "http://host.docker.internal:11434"
       - "--task"
       # choose one task

@@ -35,10 +35,10 @@ struct Cli {
     #[arg(
         long,
         global = true,
-        default_value = "template.hbs",
+        default_value = "task_template.hbs",
         help = "The path to the Handlebars template that will wrap the task"
     )]
-    template: PathBuf,
+    task_template: PathBuf,
 }
 
 #[derive(Debug, Subcommand, Clone)]
@@ -147,7 +147,7 @@ async fn run_agent(cli: Cli) -> Result<()> {
     let system = fs::read_to_string(cli.system)
         .await
         .with_context(|| "failed to read system")?;
-    let task_template = fs::read_to_string(cli.template)
+    let task_template = fs::read_to_string(cli.task_template)
         .await
         .with_context(|| "failed to read template")?;
     let mut template_registry = Handlebars::new();

@@ -20,8 +20,8 @@ services:
       # - "/system/task_wikipedia_title.md"
       - "--system"
       - "/system/system.md"
-      - "--template"
-      - "/system/template.hbs"
+      - "--task-template"
+      - "/system/task_template.hbs"
       - "--model"
       - "qwen2.5-coder:32b-instruct-q5_K_M"
     volumes:

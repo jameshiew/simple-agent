@@ -9,8 +9,9 @@ use ollama_rs::generation::chat::{ChatMessage, MessageRole};
 use ollama_rs::Ollama;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
-use tokio::fs;
 use tokio::process::Command;
+use tokio::signal::unix::SignalKind;
+use tokio::{fs, signal};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
@@ -43,14 +44,19 @@ async fn main() -> Result<()> {
         .expect("should be able to initialize the logger");
     tracing::info!("Starting up");
 
+    let mut sigterm_stream = signal::unix::signal(SignalKind::terminate())?;
+    let mut sigint_stream = signal::unix::signal(SignalKind::interrupt())?;
     tokio::select! {
         result = run_agent(cli) => {
             if let Err(e) = result {
                 bail!(e);
             }
         }
-        _ = tokio::signal::ctrl_c() => {
-            println!("CTRL-C received, shutting down");
+        _ = sigterm_stream.recv() => {
+            eprintln!("Received SIGTERM, shutting down...");
+        }
+        _ = sigint_stream.recv() => {
+            eprintln!("Received SIGINT (Ctrl-C), shutting down...");
         }
     }
 

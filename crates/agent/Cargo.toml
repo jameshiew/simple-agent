@@ -25,3 +25,4 @@ reqwest = "0.12.9"
 ollama-rs = { version = "0.2.2", features = ["chat-history"] }
 handlebars = "6.2.0"
 serde_yml = "0.0.12"
+openai-api-rs = { version = "5.2.4", features = ["rustls"] }

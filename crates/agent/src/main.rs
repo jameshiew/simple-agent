@@ -7,6 +7,8 @@ use handlebars::Handlebars;
 use ollama_rs::generation::chat::request::ChatMessageRequest;
 use ollama_rs::generation::chat::{ChatMessage, MessageRole};
 use ollama_rs::Ollama;
+use openai_api_rs::v1::api::OpenAIClient;
+use openai_api_rs::v1::chat_completion::{self, ChatCompletionRequest};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use tokio::signal::unix::SignalKind;
@@ -47,6 +49,12 @@ enum Command {
         #[arg(long, help = "The model to use")]
         model: String,
         #[arg(long, short)]
+        url: Url,
+    },
+    Openrouter {
+        #[arg(long, help = "The model to use")]
+        model: String,
+        #[arg(long, short, default_value = "https://openrouter.ai/api/v1")]
         url: Url,
     },
 }
@@ -101,6 +109,72 @@ impl OllamaChatProvider {
     }
 }
 
+struct OpenRouterChatProvider {
+    client: OpenAIClient,
+    model: String,
+    system_prompt: String,
+}
+
+impl OpenRouterChatProvider {
+    fn new(client: OpenAIClient, model: String, system_prompt: String) -> Self {
+        Self {
+            client,
+            model,
+            system_prompt,
+        }
+    }
+}
+
+impl ChatProvider for OpenRouterChatProvider {
+    async fn send(&mut self, message: &str) -> Result<String> {
+        let req = ChatCompletionRequest::new(
+            self.model.clone(),
+            vec![chat_completion::ChatCompletionMessage {
+                role: chat_completion::MessageRole::user,
+                content: chat_completion::Content::Text(String::from(self.render(&message))),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+        );
+        let response = self.client.chat_completion(req).await?;
+        let content = match &response.choices[0].message.content {
+            Some(content) => content,
+            None => bail!("no content in response"),
+        };
+        Ok(content.clone())
+    }
+
+    fn render(&self, message: &str) -> String {
+        format!("{}\n{}", self.system_prompt, message)
+    }
+}
+
+enum ChatProviders {
+    Ollama(OllamaChatProvider),
+    OpenRouter(OpenRouterChatProvider),
+}
+
+impl ChatProvider for ChatProviders {
+    async fn send(&mut self, message: &str) -> Result<String> {
+        match self {
+            ChatProviders::Ollama(ollama_chat_provider) => ollama_chat_provider.send(message).await,
+            ChatProviders::OpenRouter(open_router_chat_provider) => {
+                open_router_chat_provider.send(message).await
+            }
+        }
+    }
+
+    fn render(&self, message: &str) -> String {
+        match self {
+            ChatProviders::Ollama(ollama_chat_provider) => ollama_chat_provider.render(message),
+            ChatProviders::OpenRouter(open_router_chat_provider) => {
+                open_router_chat_provider.render(message)
+            }
+        }
+    }
+}
+
 trait ChatProvider {
     async fn send(&mut self, message: &str) -> Result<String>;
     fn render(&self, message: &str) -> String;
@@ -130,17 +204,6 @@ impl ChatProvider for OllamaChatProvider {
 }
 
 async fn run_agent(cli: Cli) -> Result<()> {
-    let Command::Ollama { model, url } = cli.command;
-    let model = model.clone();
-    let ollama = Ollama::from_url(url);
-    let models = ollama
-        .list_local_models()
-        .await
-        .with_context(|| "couldn't list available models, is Ollama running and reachable?")?;
-    if !models.into_iter().any(|m| m.name == model) {
-        bail!("model {} not found", model);
-    }
-
     let task = fs::read_to_string(cli.task)
         .await
         .with_context(|| "failed to read task")?;
@@ -152,24 +215,48 @@ async fn run_agent(cli: Cli) -> Result<()> {
         .with_context(|| "failed to read template")?;
     let mut template_registry = Handlebars::new();
     template_registry.register_escape_fn(|s| s.to_string());
-
     let task_values = HashMap::from([("task", task)]);
     let mut message = template_registry.render_template(&task_template, &task_values)?;
-    let mut ollama = OllamaChatProvider::new(ollama, model.clone(), system);
 
-    println!("Model: {}", model);
-    println!("Chat ID: {}", ollama.chat_id);
+    let mut chat_provider = match cli.command {
+        Command::Ollama { model, url } => {
+            let model = model.clone();
+            let ollama = Ollama::from_url(url);
+            let models = ollama.list_local_models().await.with_context(|| {
+                "couldn't list available models, is Ollama running and reachable?"
+            })?;
+            if !models.into_iter().any(|m| m.name == model) {
+                bail!("model {} not found", model);
+            }
+            let ollama = OllamaChatProvider::new(ollama, model.clone(), system);
 
-    let first_prompt = ollama.render(&message);
+            println!("Model: {}", model);
+            println!("Chat ID: {}", ollama.chat_id);
+            ChatProviders::Ollama(ollama)
+        }
+        Command::Openrouter { model, url } => {
+            let api_key = std::env::var("OPENROUTER_API_KEY")
+                .with_context(|| "OPENROUTER_API_KEY not found in environment")?;
+            let openrouter = OpenAIClient::builder()
+                .with_api_key(api_key)
+                .with_endpoint(url)
+                .build()
+                .map_err(|_e| anyhow!("couldn't build OpenRouter client"))?;
+            let openrouter = OpenRouterChatProvider::new(openrouter, model, system);
+            ChatProviders::OpenRouter(openrouter)
+        }
+    };
+
+    let first_prompt = chat_provider.render(&message);
     println!("---");
     println!("## First request");
     println!("{}", &first_prompt);
     println!();
-    println!("> Sending first request to Ollama (may take a short while while model is loaded)");
+    println!("> Sending first request (may take a short while if using Ollama)");
     let mut i = 0;
     loop {
         i += 1;
-        let response = ollama.send(&message).await?;
+        let response = chat_provider.send(&message).await?;
         println!("## Response {}", i);
         println!("{}", response);
         println!();

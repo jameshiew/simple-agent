@@ -46,7 +46,7 @@ async fn main() -> Result<()> {
     tokio::select! {
         result = run_agent(cli) => {
             if let Err(e) = result {
-                eprintln!("Agent failed: {e:?}");
+                bail!(e);
             }
         }
         _ = tokio::signal::ctrl_c() => {
@@ -61,7 +61,10 @@ async fn main() -> Result<()> {
 async fn run_agent(cli: Cli) -> Result<()> {
     let model = cli.model.clone();
     let mut ollama = Ollama::from_url(cli.ollama);
-    let models = ollama.list_local_models().await?;
+    let models = ollama
+        .list_local_models()
+        .await
+        .with_context(|| "couldn't list available models, is Ollama running and reachable?")?;
     if !models.into_iter().any(|m| m.name == model) {
         bail!("Model {} not found", model);
     }
@@ -95,7 +98,7 @@ async fn run_agent(cli: Cli) -> Result<()> {
         images: None,
     };
     let mut request = ChatMessageRequest::new(model.clone(), vec![initial_message]);
-
+    println!("Sending first request to Ollama (may take a short while while model is loaded)");
     loop {
         let response = ollama
             .send_chat_messages_with_history(request, &chat_id)

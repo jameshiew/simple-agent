@@ -24,7 +24,10 @@ struct Cli {
     ollama: Url,
     #[arg(long, help = "The path to the system prompt")]
     system: PathBuf,
-    #[arg(long, help = "The path to the prompt Handlebarstemplate")]
+    #[arg(
+        long,
+        help = "The path to the Handlebars template that will wrap the task"
+    )]
     template: PathBuf,
 }
 

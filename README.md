@@ -1,14 +1,18 @@
 # simple-agent
 
-Testing out a simple agent that can run shell commands inside a Docker container.
+Give an LLM a regular UNIX environment and a workspace, and let it run shell commands until it completes some task. Runs in a Docker container, edits files in `workspace/` and reads tasks and prompts from `system/`.
 
-System prompt and example tasks in `system/`:
+Example tasks:
 
-- `task_build_run.md` - build and run a tiny program in Go
-- `task_python_fibonacci.md` - Python script that outputs the first n Fibonacci numbers
-- `task_wikipedia_title.md` - download the Wikipedia homepage and parse the title
+- [system/task_build_run.md](system/task_build_run.md) - build and run a tiny program in Go
+- [system/task_python_fibonacci.md](system/task_python_fibonacci.md) - Python script that outputs the first n Fibonacci numbers
+- [system/task_wikipedia_title.md](system/task_wikipedia_title.md) - download the Wikipedia homepage and parse the title
 
-Task is passed as an argument to the `simple-agent` binary in `compose.yml` and any files written by the agent should appear in the `workspace/` directory.
+Task is passed as an argument to the `simple-agent` binary in `compose.yml`.
+
+## Why?
+
+This is for quickly experimenting with what LLMs are able to achieve with only straightforward shell access rather than well-defined tools specified ahead of time like [ChatGPT functions](https://platform.openai.com/docs/guides/function-calling). In the future, a more general AI should be able to use just a regular command line to achieve a lot of tasks.
 
 ## Requirements
 

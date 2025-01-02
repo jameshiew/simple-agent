@@ -11,7 +11,6 @@ use simple_agent::ollama::OllamaChatProvider;
 use simple_agent::openrouter::OpenRouterChatProvider;
 use simple_agent::providers::{ChatProvider, ChatProviders};
 use simple_agent::run::run_agent;
-use tokio::signal::unix::SignalKind;
 use tokio::{fs, signal};
 use tracing_subscriber::EnvFilter;
 
@@ -71,19 +70,36 @@ async fn main() -> Result<()> {
         .expect("should be able to initialize the logger");
     tracing::info!("Starting up");
 
-    let mut sigterm_stream = signal::unix::signal(SignalKind::terminate())?;
-    let mut sigint_stream = signal::unix::signal(SignalKind::interrupt())?;
-    tokio::select! {
-        result = setup(cli) => {
-            if let Err(e) = result {
-                bail!(e);
+    #[cfg(target_family = "unix")]
+    {
+        let mut sigterm_stream = signal::unix::signal(signal::unix::SignalKind::terminate())?;
+        let mut sigint_stream = signal::unix::signal(signal::unix::SignalKind::interrupt())?;
+        tokio::select! {
+            result = setup(cli) => {
+                if let Err(e) = result {
+                    bail!(e);
+                }
+            }
+            _ = sigterm_stream.recv() => {
+                eprintln!("Received SIGTERM, shutting down...");
+            }
+            _ = sigint_stream.recv() => {
+                eprintln!("Received SIGINT (Ctrl-C), shutting down...");
             }
         }
-        _ = sigterm_stream.recv() => {
-            eprintln!("Received SIGTERM, shutting down...");
-        }
-        _ = sigint_stream.recv() => {
-            eprintln!("Received SIGINT (Ctrl-C), shutting down...");
+    }
+    #[cfg(target_family = "windows")]
+    {
+        let ctrlc_stream = signal::ctrl_c();
+        tokio::select! {
+            result = setup(cli) => {
+                if let Err(e) = result {
+                    bail!(e);
+                }
+            }
+            _ = ctrlc_stream => {
+                eprintln!("Received Ctrl-C, shutting down...");
+            }
         }
     }
 

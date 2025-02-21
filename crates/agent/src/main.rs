@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use anyhow::{anyhow, bail, Context, Result};
-use clap::{command, Parser, Subcommand};
+use anyhow::{Context, Result, anyhow, bail};
+use clap::{Parser, Subcommand, command};
 use handlebars::Handlebars;
 use ollama_rs::Ollama;
 use openai_api_rs::v1::api::OpenAIClient;
@@ -126,9 +126,9 @@ async fn setup(cli: Cli) -> Result<()> {
         Command::Ollama { model, url } => {
             let model = model.clone();
             let ollama = Ollama::from_url(url);
-            let models = ollama.list_local_models().await.with_context(|| {
-                "couldn't list available models, is Ollama running and reachable?"
-            })?;
+            let models = ollama.list_local_models().await.with_context(
+                || "couldn't list available models, is Ollama running and reachable?",
+            )?;
             if !models.into_iter().any(|m| m.name == model) {
                 bail!("model {} not found", model);
             }

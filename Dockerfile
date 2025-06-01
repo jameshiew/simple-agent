@@ -1,4 +1,4 @@
-FROM rust:1.85-bookworm AS build
+FROM rust:1.87-bookworm AS build
 
 ENV CARGO_TARGET_DIR=/target
 

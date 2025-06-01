@@ -1,4 +1,5 @@
 run:
+    docker compose build
     docker compose up
 
 # update the recipe.json file - this should be done whenever Cargo.lock is changed

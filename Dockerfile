@@ -2,7 +2,7 @@ FROM rust:1.87-bookworm AS build
 
 ENV CARGO_TARGET_DIR=/target
 
-RUN cargo install cargo-chef --locked --version 0.1.68
+RUN cargo install cargo-chef --locked --version 0.1.71
 
 COPY recipe.json .
 RUN cargo chef cook --recipe-path recipe.json

@@ -134,7 +134,7 @@ async fn setup(cli: Cli) -> Result<()> {
             }
             let ollama = OllamaChatProvider::new(ollama, model.clone(), system);
 
-            println!("Model: {}", model);
+            println!("Model: {model}");
             println!("Chat ID: {}", ollama.chat_id);
             ChatProviders::Ollama(ollama)
         }

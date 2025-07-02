@@ -9,8 +9,8 @@ pub async fn run_agent(mut chat_provider: impl ChatProvider, mut message: String
     loop {
         i += 1;
         let response = chat_provider.send(&message).await?;
-        println!("## Response {}", i);
-        println!("{}", response);
+        println!("## Response {i}");
+        println!("{response}");
         println!();
         let output = match parse(&response) {
             Ok(response) => {
@@ -35,7 +35,7 @@ pub async fn run_agent(mut chat_provider: impl ChatProvider, mut message: String
                         Err(err) => {
                             println!("## Error trying to run command");
                             println!();
-                            println!("{}", err);
+                            println!("{err}");
                             Some(CommandOutput {
                                 stdout: "Error trying to run command".to_string(),
                                 stderr: err.to_string(),
@@ -48,7 +48,7 @@ pub async fn run_agent(mut chat_provider: impl ChatProvider, mut message: String
             Err(err) => {
                 println!("## Error parsing response");
                 println!();
-                println!("{}", err);
+                println!("{err}");
                 Some(CommandOutput {
                     stdout: "Error parsing response".to_string(),
                     stderr: err.to_string(),
@@ -63,8 +63,8 @@ pub async fn run_agent(mut chat_provider: impl ChatProvider, mut message: String
         message = serde_yml::to_string(&output)?;
 
         println!("---");
-        println!("## Request {}", i);
-        println!("{}", message);
+        println!("## Request {i}");
+        println!("{message}");
         println!();
     }
     Ok(())
